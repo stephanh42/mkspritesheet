@@ -7,6 +7,8 @@ from collections import namedtuple
 import os.path
 import argparse
 
+allow_transpose = False
+
 class Rect(namedtuple("Rect", "x1 y1 x2 y2")):
     """A 2D rectangle"""
 
@@ -108,27 +110,39 @@ class ImageInfo(object):
         x1, y1, x2, y2 = self.box
         W = x2 - x1
         H = y2 - y1
-        self.actual_size = (max(W, H), min(W, H))
+        if allow_transpose:
+            self.actual_size = (max(W, H), min(W, H))
+        else:
+            self.actual_size = (W, H)
         self.area = W * H
 
 def main():
+    global allow_transpose
+
     parser = argparse.ArgumentParser(prog='mkspritesheet')
     parser.add_argument('filename', nargs='+')
     parser.add_argument("-o", "--output", help="base name of output files")
+    parser.add_argument("-s", "--straight", action="store_true", help="don't transpose images")
+    parser.add_argument("--scaled_st", action="store_true", help="st scaled in pixels")
     parsed = parser.parse_args()
     output_basename = parsed.output
     if output_basename is None:
         output_basename = "spritesheet"
+    allow_transpose = not parsed.straight
+    scaled_st = parsed.scaled_st
 
     output_filename = os.path.abspath(output_basename + ".png")
     images = [ImageInfo(filename) for filename in parsed.filename if os.path.abspath(filename) != output_filename]
     images.sort(key=operator.attrgetter('area', 'actual_size'), reverse=True)
     max_W = max(im.actual_size[0] for im in images)
+    max_H = max(im.actual_size[1] for im in images)
     total_area = sum(im.area for im in images)
 
     output_W = 1; output_H = 1
     while output_W < max_W:
         output_W *= 2
+    while output_H < max_H:
+        output_H *= 2
     while output_W * output_H < total_area:
         if output_W <= output_H:
             output_W *= 2
@@ -144,7 +158,7 @@ def main():
                 rect = Rect(0, 0, 0, 0)
             else:
                 rect = region.find_fit(W, H)
-                if rect is None:
+                if rect is None and allow_transpose:
                     rect = region.find_fit(H, W)
             if rect is not None:
                 im.rect = rect
@@ -172,8 +186,10 @@ def main():
         im_json["xy"] = im_info.box
         rect = im_info.rect
         s1, t1, s2, t2 = rect
-        im_json["st"] = [s1/output_W, t1/output_H, s2/output_W, t2/output_H]
-#        im_json["st"] = [s1, t1, s2, t2]
+        if scaled_st:
+            im_json["st"] = [s1, t1, s2, t2]
+        else:
+            im_json["st"] = [s1/output_W, t1/output_H, s2/output_W, t2/output_H]
         if rect.size() != im.size:
             im = im.transpose(Image.TRANSPOSE)
             transposed = True
