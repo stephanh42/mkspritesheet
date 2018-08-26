@@ -196,7 +196,8 @@ def main():
         else:
             transposed = False
         assert rect.size() == im.size
-        im_json["transposed"] = transposed
+        if allow_transpose:
+            im_json["transposed"] = transposed
         output_im.paste(im, box=rect)
         output_json[im_info.filename] = im_json
 
